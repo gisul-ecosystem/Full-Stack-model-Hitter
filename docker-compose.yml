@@ -1,0 +1,53 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: vm-to-model-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  app:
+    image: ${DOCKER_IMAGE:-vm-to-model:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vm-to-model-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+
+      # App uses compose Mongo (same DB as host via localhost:27017)
+      MONGODB_URI: mongodb://mongo:27017/vm-to-model
+      APP_BASE_URL: ${APP_BASE_URL:-http://103.99.38.224:3000}
+
+      # ZeptoMail (Zoho) — Send Mail API
+      ZEPTOMAIL_API_KEY: PHtE6r0OSuno3jEr+xIB5fS5R5LwMt4mr7w1LAJGuYgRCaMAS00A/dF+mj7mqE8rVPkRRvabz49rsumetbmCJWnrNG8fDWqyqK3sx/VYSPOZsbq6x00Zs1kfdEbYUI7sdt5p0CDSuN/eNA==
+      ZEPTOMAIL_FROM_EMAIL: info@aaptor.com
+      ZEPTOMAIL_FROM_NAME: Aaptor
+      ZEPTOMAIL_API_URL: https://api.zeptomail.in/v1.1/email
+      NOTIFICATION_EMAIL: info@aaptor.com
+
+      # Model scoring — async project eval (no API key / org headers)
+      MODEL_API_URL: https://model.aaptor.com
+      MODEL_POLL_INTERVAL_MS: "2500"
+      MODEL_POLL_TIMEOUT_MS: "600000"
+      MAX_ZIP_BYTES: "26214400"
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
+  uploads_data:
