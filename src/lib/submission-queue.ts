@@ -1,5 +1,5 @@
 import { connectMongo } from "@/lib/mongodb";
-import { Test } from "@/lib/models/Test";
+import { Test, type ITest } from "@/lib/models/Test";
 import { TestCandidate } from "@/lib/models/TestCandidate";
 import { Submission } from "@/lib/models/Submission";
 import { buildProjectEvalFiles, extractZipSubmission } from "@/lib/extract-zip";
@@ -123,7 +123,11 @@ export async function scoreOne(
       throw new Error("No eligible text files found after extract");
     }
 
-    const test = submission.testId ? await Test.findById(submission.testId).lean() : null;
+    const test = submission.testId
+      ? ((await Test.findById(submission.testId)
+          .select("title description")
+          .lean()) as Pick<ITest, "title" | "description"> | null)
+      : null;
     const languageHint = guessLanguageHint(files);
     const frameworkHint = guessFrameworkHint(files);
 
