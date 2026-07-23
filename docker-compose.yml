@@ -21,14 +21,14 @@ services:
       dockerfile: Dockerfile
     container_name: vm-to-model-app
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       NODE_ENV: production
 
       # App uses compose Mongo (same DB as host via localhost:27017)
       MONGODB_URI: mongodb://mongo:27017/vm-to-model
-      APP_BASE_URL: ${APP_BASE_URL:-http://103.99.38.224:3000}
+      APP_BASE_URL: ${APP_BASE_URL:-https://submit.aaptor.com}
 
       # ZeptoMail (Zoho) — Send Mail API
       ZEPTOMAIL_API_KEY: PHtE6r0OSuno3jEr+xIB5fS5R5LwMt4mr7w1LAJGuYgRCaMAS00A/dF+mj7mqE8rVPkRRvabz49rsumetbmCJWnrNG8fDWqyqK3sx/VYSPOZsbq6x00Zs1kfdEbYUI7sdt5p0CDSuN/eNA==
@@ -48,6 +48,22 @@ services:
       mongo:
         condition: service_healthy
 
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: vm-to-model-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/submit.aaptor.com.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_certs:/etc/letsencrypt:ro
+    depends_on:
+      - app
+
 volumes:
   mongo_data:
   uploads_data:
+  certbot_www:
+  certbot_certs:

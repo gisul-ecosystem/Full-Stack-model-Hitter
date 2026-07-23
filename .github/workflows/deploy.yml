@@ -11,7 +11,7 @@ env:
   DEPLOY_HOST: 103.99.38.224
   DEPLOY_USER: ubuntu
   DEPLOY_PATH: /home/ubuntu/vm-to-model
-  APP_BASE_URL: http://103.99.38.224:3000
+  APP_BASE_URL: https://submit.aaptor.com
   IMAGE_NAME: vm-to-model
 
 jobs:
@@ -58,14 +58,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Copy compose file to VM
+      - name: Copy deploy files to VM
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ env.DEPLOY_HOST }}
           username: ${{ env.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          source: docker-compose.yml
+          source: "docker-compose.yml,nginx/submit.aaptor.com.conf"
           target: ${{ env.DEPLOY_PATH }}
           strip_components: 0
 
@@ -86,7 +86,7 @@ jobs:
               exit 1
             fi
 
-            mkdir -p "${DEPLOY_PATH}"
+            mkdir -p "${DEPLOY_PATH}/nginx"
             cd "${DEPLOY_PATH}"
 
             echo "${DOCKER_TOKEN}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
@@ -94,7 +94,7 @@ jobs:
             export DOCKER_IMAGE
             export APP_BASE_URL
 
-            docker compose pull app
+            docker compose pull app nginx
             docker compose up -d --remove-orphans
             docker image prune -f
 
