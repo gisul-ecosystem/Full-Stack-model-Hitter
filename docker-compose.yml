@@ -37,6 +37,10 @@ services:
       ZEPTOMAIL_API_URL: https://api.zeptomail.in/v1.1/email
       NOTIFICATION_EMAIL: info@aaptor.com
 
+      AUTH_EMAIL: info@aaptor.com
+      AUTH_PASSWORD: Aaptor@123
+      AUTH_SECRET=i1+A4nAwVp1MI2CTyaErjtq6h3tK6JUNkUzCRzydj7M=
+
       # Model scoring — async project eval (no API key / org headers)
       MODEL_API_URL: https://model.aaptor.com
       MODEL_POLL_INTERVAL_MS: "2500"

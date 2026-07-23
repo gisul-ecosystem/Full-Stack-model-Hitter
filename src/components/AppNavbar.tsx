@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const NAV_ITEMS = [
@@ -17,8 +17,11 @@ function isActive(pathname: string, href: string) {
 
 export function AppNavbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const isPublicSubmit = pathname.startsWith("/submit/");
+  const isLogin = pathname === "/login";
 
   useEffect(() => {
     setOpen(false);
@@ -33,12 +36,38 @@ export function AppNavbar() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  async function logout() {
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.replace("/login");
+      router.refresh();
+    } finally {
+      setLoggingOut(false);
+    }
+  }
+
   if (isPublicSubmit) {
     return (
       <header className="sticky top-0 z-50 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--card)_92%,transparent)] backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-6xl items-center px-4 md:px-8">
           <span className="brand-title">Aaptor</span>
           <span className="brand-sub ml-2">Project submit</span>
+        </div>
+      </header>
+    );
+  }
+
+  if (isLogin) {
+    return (
+      <header className="sticky top-0 z-50 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--card)_92%,transparent)] backdrop-blur-md">
+        <div className="mx-auto flex h-14 max-w-6xl items-center px-4 md:px-8">
+          <span className="inline-flex items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] font-[family-name:var(--font-display)] text-sm font-bold text-white">
+              A
+            </span>
+            <span className="brand-title">Aaptor</span>
+          </span>
         </div>
       </header>
     );
@@ -80,10 +109,14 @@ export function AppNavbar() {
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="hidden items-center gap-1.5 rounded-full border border-[var(--line)] bg-white px-2.5 py-1 font-[family-name:var(--font-display)] text-[0.65rem] font-semibold tracking-[0.08em] uppercase text-[var(--muted)] sm:inline-flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
-            Ops console
-          </span>
+          <button
+            type="button"
+            onClick={logout}
+            disabled={loggingOut}
+            className="hidden rounded-lg border border-[var(--line)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--muted)] hover:bg-stone-50 sm:inline-flex disabled:opacity-60"
+          >
+            {loggingOut ? "Signing out…" : "Logout"}
+          </button>
 
           <button
             type="button"
@@ -131,6 +164,14 @@ export function AppNavbar() {
               </Link>
             );
           })}
+          <button
+            type="button"
+            onClick={logout}
+            disabled={loggingOut}
+            className="rounded-lg px-3 py-2.5 text-left text-sm text-[var(--muted)]"
+          >
+            {loggingOut ? "Signing out…" : "Logout"}
+          </button>
         </nav>
       </div>
     </header>
