@@ -23,6 +23,8 @@ export default function TestsPage() {
   const [acceptanceCriteria, setAcceptanceCriteria] = useState("");
   const [languageHint, setLanguageHint] = useState("");
   const [frameworkHint, setFrameworkHint] = useState("");
+  const [startsAt, setStartsAt] = useState("");
+  const [endsAt, setEndsAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +68,8 @@ export default function TestsPage() {
           acceptanceCriteria,
           languageHint,
           frameworkHint,
+          startsAt: startsAt || null,
+          endsAt: endsAt || null,
         }),
       });
       const data = await res.json();
@@ -75,6 +79,8 @@ export default function TestsPage() {
       setAcceptanceCriteria("");
       setLanguageHint("");
       setFrameworkHint("");
+      setStartsAt("");
+      setEndsAt("");
       setMessage(`Created “${data.test.title}”. Open it to add candidates.`);
       await load();
     } catch (err) {
@@ -149,6 +155,29 @@ export default function TestsPage() {
               />
             </label>
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm">
+              Start time
+              <input
+                type="datetime-local"
+                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2"
+                value={startsAt}
+                onChange={(e) => setStartsAt(e.target.value)}
+              />
+            </label>
+            <label className="block text-sm">
+              End time
+              <input
+                type="datetime-local"
+                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2"
+                value={endsAt}
+                onChange={(e) => setEndsAt(e.target.value)}
+              />
+            </label>
+          </div>
+          <p className="m-0 text-xs text-[var(--muted)]">
+            Submit link works only between start and end. Leave empty for no time limit.
+          </p>
           <button
             type="submit"
             disabled={busy}

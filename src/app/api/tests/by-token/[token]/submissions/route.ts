@@ -7,6 +7,7 @@ import { Submission } from "@/lib/models/Submission";
 import { saveZipFile } from "@/lib/storage";
 import { processSubmissionQueue } from "@/lib/submission-queue";
 import { normalizeSubmitToken } from "@/lib/tokens";
+import { getSubmitWindowState } from "@/lib/submit-window";
 
 export const runtime = "nodejs";
 
@@ -27,8 +28,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (!test) {
       return NextResponse.json({ error: "Invalid submission link" }, { status: 404 });
     }
-    if (test.status === "closed") {
-      return NextResponse.json({ error: "This test is closed" }, { status: 403 });
+
+    const window = getSubmitWindowState(test);
+    if (!window.open) {
+      return NextResponse.json(
+        { error: window.message, reason: window.reason },
+        { status: 403 }
+      );
     }
 
     const formData = await request.formData();
@@ -74,7 +80,27 @@ export async function POST(request: NextRequest, { params }: Params) {
       );
     }
 
-    // Optional soft check: warn if name differs but still allow if email matches
+    const existing = await Submission.findOne({
+      testId: test._id,
+      testCandidateId: candidate._id,
+    })
+      .select("_id status queuedAt")
+      .sort({ queuedAt: -1 })
+      .lean();
+
+    if (existing) {
+      return NextResponse.json(
+        {
+          error:
+            "You have already submitted for this test. Duplicate submissions are not allowed.",
+          reason: "duplicate_submission",
+          submissionId: String((existing as { _id: unknown })._id),
+          status: (existing as { status?: string }).status,
+        },
+        { status: 409 }
+      );
+    }
+
     const saved = await saveZipFile(file);
 
     const submission = await Submission.create({
@@ -112,6 +138,21 @@ export async function POST(request: NextRequest, { params }: Params) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Upload failed";
+    if (
+      typeof error === "object" &&
+      error &&
+      "code" in error &&
+      (error as { code?: number }).code === 11000
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "You have already submitted for this test. Duplicate submissions are not allowed.",
+          reason: "duplicate_submission",
+        },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

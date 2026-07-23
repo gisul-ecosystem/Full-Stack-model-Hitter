@@ -3,6 +3,7 @@ import { connectMongo } from "@/lib/mongodb";
 import { DEFAULT_PROJECT_RUBRIC, Test } from "@/lib/models/Test";
 import { DEFAULT_BODY, DEFAULT_SUBJECT } from "@/lib/email-template";
 import { createSubmitToken } from "@/lib/tokens";
+import { parseOptionalDate } from "@/lib/submit-window";
 
 export const runtime = "nodejs";
 
@@ -40,6 +41,22 @@ export async function POST(request: NextRequest) {
     const languageHint = String(body.languageHint || "").trim();
     const frameworkHint = String(body.frameworkHint || "").trim();
 
+    let startsAt: Date | null | undefined;
+    let endsAt: Date | null | undefined;
+    try {
+      startsAt = parseOptionalDate(body.startsAt);
+      endsAt = parseOptionalDate(body.endsAt);
+    } catch {
+      return NextResponse.json({ error: "Invalid start or end time" }, { status: 400 });
+    }
+
+    if (startsAt && endsAt && endsAt.getTime() <= startsAt.getTime()) {
+      return NextResponse.json(
+        { error: "End time must be after start time" },
+        { status: 400 }
+      );
+    }
+
     if (!title) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
     }
@@ -60,6 +77,8 @@ export async function POST(request: NextRequest) {
       rubric: { ...DEFAULT_PROJECT_RUBRIC },
       maxMarks: 100,
       evaluationMode: "deep",
+      startsAt: startsAt || undefined,
+      endsAt: endsAt || undefined,
       submitToken,
       subjectTemplate: DEFAULT_SUBJECT,
       bodyTemplate: DEFAULT_BODY,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectMongo } from "@/lib/mongodb";
 import { Test, type ITest } from "@/lib/models/Test";
 import { normalizeSubmitToken } from "@/lib/tokens";
+import { getSubmitWindowState } from "@/lib/submit-window";
 
 export const runtime = "nodejs";
 
@@ -16,8 +17,23 @@ export async function GET(_request: NextRequest, { params }: Params) {
     if (!test) {
       return NextResponse.json({ error: "Invalid submission link" }, { status: 404 });
     }
-    if (test.status === "closed") {
-      return NextResponse.json({ error: "This test is closed" }, { status: 403 });
+
+    const window = getSubmitWindowState(test);
+    if (!window.open) {
+      return NextResponse.json(
+        {
+          error: window.message,
+          reason: window.reason,
+          test: {
+            title: test.title,
+            description: test.description,
+            status: test.status,
+            startsAt: window.startsAt?.toISOString() || null,
+            endsAt: window.endsAt?.toISOString() || null,
+          },
+        },
+        { status: 403 }
+      );
     }
 
     return NextResponse.json({
@@ -25,6 +41,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
         title: test.title,
         description: test.description,
         status: test.status,
+        startsAt: window.startsAt?.toISOString() || null,
+        endsAt: window.endsAt?.toISOString() || null,
       },
     });
   } catch (error) {

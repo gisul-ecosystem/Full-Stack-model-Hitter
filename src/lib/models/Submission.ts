@@ -153,5 +153,7 @@ const SubmissionSchema = new Schema<ISubmission>(
   { timestamps: true }
 );
 
+SubmissionSchema.index({ testCandidateId: 1 }, { unique: true });
+
 export const Submission =
   models.Submission || model<ISubmission>("Submission", SubmissionSchema);

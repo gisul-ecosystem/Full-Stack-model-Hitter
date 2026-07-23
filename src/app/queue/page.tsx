@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, Fragment } from "react";
+import { useCallback, useEffect, useRef, useState, Fragment } from "react";
 import Link from "next/link";
 import { AlertBanner, PageHeader, Panel, StatCard, StatusPill } from "@/components/ui";
 
@@ -79,6 +79,7 @@ export default function QueuePage() {
   const [loading, setLoading] = useState(true);
   const [reevaluatingId, setReevaluatingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const processInFlight = useRef(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -95,13 +96,19 @@ export default function QueuePage() {
   }, []);
 
   const tick = useCallback(async () => {
-    try {
-      await fetch("/api/queue/process", { method: "POST" });
-    } catch {
-      // ignore process errors; status poll still useful
+    // Don't stack process calls — one model job at a time; wait for HTTP to finish.
+    if (!processInFlight.current && !reevaluatingId) {
+      processInFlight.current = true;
+      try {
+        await fetch("/api/queue/process", { method: "POST" });
+      } catch {
+        // ignore process errors; status poll still useful
+      } finally {
+        processInFlight.current = false;
+      }
     }
     await load();
-  }, [load]);
+  }, [load, reevaluatingId]);
 
   useEffect(() => {
     if (reevaluatingId) return;

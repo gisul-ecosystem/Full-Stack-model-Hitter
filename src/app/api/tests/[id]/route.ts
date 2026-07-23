@@ -3,6 +3,7 @@ import { connectMongo } from "@/lib/mongodb";
 import { Test, type ITest } from "@/lib/models/Test";
 import { TestCandidate } from "@/lib/models/TestCandidate";
 import { submissionUrlForToken } from "@/lib/email-template";
+import { parseOptionalDate } from "@/lib/submit-window";
 
 export const runtime = "nodejs";
 
@@ -86,6 +87,32 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
     if (body.status && ["draft", "active", "closed"].includes(body.status)) {
       test.status = body.status;
+    }
+
+    if (body.startsAt !== undefined) {
+      try {
+        const startsAt = parseOptionalDate(body.startsAt);
+        test.startsAt = startsAt || undefined;
+      } catch {
+        return NextResponse.json({ error: "Invalid start time" }, { status: 400 });
+      }
+    }
+    if (body.endsAt !== undefined) {
+      try {
+        const endsAt = parseOptionalDate(body.endsAt);
+        test.endsAt = endsAt || undefined;
+      } catch {
+        return NextResponse.json({ error: "Invalid end time" }, { status: 400 });
+      }
+    }
+
+    const start = test.startsAt ? new Date(test.startsAt).getTime() : null;
+    const end = test.endsAt ? new Date(test.endsAt).getTime() : null;
+    if (start != null && end != null && end <= start) {
+      return NextResponse.json(
+        { error: "End time must be after start time" },
+        { status: 400 }
+      );
     }
 
     await test.save();

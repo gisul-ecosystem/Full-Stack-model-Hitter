@@ -95,7 +95,7 @@ export async function GET() {
         zipsTotal: zipCounts.reduce((n, r) => n + r.count, 0),
         filesExtracted: zipCounts.reduce((n, r) => n + (r.filesExtracted || 0), 0),
         filesSentToModel: zipCounts.reduce((n, r) => n + (r.filesSentToModel || 0), 0),
-        note: "One model request at a time; next ZIP is pre-extracted after a score.",
+        note: "Strict single-flight: only one ZIP is sent to the model at a time; the next waits until that score finishes.",
       },
       worker: {
         mode: "single-flight",

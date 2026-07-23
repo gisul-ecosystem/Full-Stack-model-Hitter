@@ -14,6 +14,8 @@ type TestDto = {
   languageHint?: string;
   frameworkHint?: string;
   evaluationMode?: "deep" | "fast";
+  startsAt?: string;
+  endsAt?: string;
   status: string;
   submitToken: string;
   candidateCount: number;
@@ -153,6 +155,14 @@ function statusTone(label: string) {
   return "bg-stone-100 text-stone-600 ring-1 ring-stone-200";
 }
 
+function toDatetimeLocalValue(iso?: string | null) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function TestDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -177,6 +187,8 @@ export default function TestDetailPage() {
   const [gradeCriteria, setGradeCriteria] = useState("");
   const [gradeLanguage, setGradeLanguage] = useState("");
   const [gradeFramework, setGradeFramework] = useState("");
+  const [startsAtLocal, setStartsAtLocal] = useState("");
+  const [endsAtLocal, setEndsAtLocal] = useState("");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -193,6 +205,8 @@ export default function TestDetailPage() {
       setGradeCriteria((testData.test?.acceptanceCriteria || []).join("\n"));
       setGradeLanguage(testData.test?.languageHint || "");
       setGradeFramework(testData.test?.frameworkHint || "");
+      setStartsAtLocal(toDatetimeLocalValue(testData.test?.startsAt));
+      setEndsAtLocal(toDatetimeLocalValue(testData.test?.endsAt));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
@@ -331,6 +345,32 @@ export default function TestDetailPage() {
       setMessage("Grading settings saved. New scores will use this rubric.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save grading settings");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveSubmitWindow() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/tests/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startsAt: startsAtLocal || null,
+          endsAt: endsAtLocal || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save submit window");
+      setTest(data.test);
+      setStartsAtLocal(toDatetimeLocalValue(data.test?.startsAt));
+      setEndsAtLocal(toDatetimeLocalValue(data.test?.endsAt));
+      setMessage("Submit window saved. The link only works between start and end.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save submit window");
     } finally {
       setBusy(false);
     }
@@ -519,6 +559,44 @@ export default function TestDetailPage() {
             <IconTrash /> Delete Assessment
           </button>
         </div>
+      </section>
+
+      {/* Submit window */}
+      <section className="mb-5 rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <h2 className="m-0 text-[1.1rem] font-bold text-slate-900">Submit window</h2>
+          <p className="mt-1 mb-0 text-sm text-slate-500">
+            The public submit URL works only between start and end. Before start or after end, uploads are blocked.
+          </p>
+        </div>
+        <div className="grid max-w-3xl gap-3 sm:grid-cols-2">
+          <label className="block text-sm font-medium text-slate-700">
+            Start time
+            <input
+              type="datetime-local"
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-normal"
+              value={startsAtLocal}
+              onChange={(e) => setStartsAtLocal(e.target.value)}
+            />
+          </label>
+          <label className="block text-sm font-medium text-slate-700">
+            End time
+            <input
+              type="datetime-local"
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-normal"
+              value={endsAtLocal}
+              onChange={(e) => setEndsAtLocal(e.target.value)}
+            />
+          </label>
+        </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={saveSubmitWindow}
+          className="mt-4 w-fit rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+        >
+          {busy ? "Saving…" : "Save submit window"}
+        </button>
       </section>
 
       {/* Model grading (project_eval.v2) */}

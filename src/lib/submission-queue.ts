@@ -10,6 +10,9 @@ import {
   scoreSubmissionWithModel,
 } from "@/lib/model-client";
 
+/** In-process lock: only one model eval at a time (8GB GPU / single seq). */
+let scoringInFlight = false;
+
 function guessLanguageHint(files: { path: string; language?: string }[]) {
   const counts = new Map<string, number>();
   for (const f of files) {
@@ -86,13 +89,25 @@ async function syncTestCandidateFromSubmission(submissionId: string) {
   }
 }
 
-export async function extractOne(submissionId: string) {
+async function anotherScoreRunning(excludeId?: string) {
+  const q: Record<string, unknown> = { status: "scoring" };
+  if (excludeId) q._id = { $ne: excludeId };
+  const active = await Submission.findOne(q).select("_id").lean();
+  return Boolean(active);
+}
+
+export async function extractOne(
+  submissionId: string,
+  options?: { alreadyClaimed?: boolean }
+) {
   const submission = await Submission.findById(submissionId);
   if (!submission) return null;
 
-  submission.status = "extracting";
-  await submission.save();
-  await syncTestCandidateFromSubmission(String(submission._id));
+  if (!options?.alreadyClaimed || submission.status !== "extracting") {
+    submission.status = "extracting";
+    await submission.save();
+    await syncTestCandidateFromSubmission(String(submission._id));
+  }
 
   try {
     const files = await extractZipSubmission(
@@ -123,108 +138,153 @@ export async function extractOne(submissionId: string) {
 
 export async function scoreOne(
   submissionId: string,
-  options?: { useCache?: boolean }
+  options?: { useCache?: boolean; alreadyClaimed?: boolean; holdLock?: boolean }
 ) {
   const submission = await Submission.findById(submissionId);
   if (!submission) return null;
 
-  submission.status = "scoring";
-  await submission.save();
-  await syncTestCandidateFromSubmission(String(submission._id));
+  // When processSubmissionQueue already holds the lock + claimed the row.
+  const takeLock = options?.holdLock !== false && !options?.alreadyClaimed;
+
+  if (takeLock) {
+    if (scoringInFlight || (await anotherScoreRunning(submissionId))) {
+      throw new Error(
+        "Another submission is being scored. Wait for it to finish before starting another."
+      );
+    }
+    scoringInFlight = true;
+  }
 
   try {
-    const files = await extractZipSubmission(
-      String(submission._id),
-      submission.zipStoragePath
-    );
-    const payloadFiles = buildProjectEvalFiles(files);
-    if (!payloadFiles.length) {
-      throw new Error("No eligible text files found after extract");
+    if (!options?.alreadyClaimed) {
+      const claimed = await Submission.findOneAndUpdate(
+        {
+          _id: submissionId,
+          status: { $in: ["extracted", "failed", "completed"] },
+        },
+        { $set: { status: "scoring" } },
+        { new: true }
+      );
+      if (!claimed) {
+        const current = (await Submission.findById(submissionId)
+          .select("status")
+          .lean()) as { status?: string } | null;
+        throw new Error(
+          `Cannot score submission in status “${current?.status || "unknown"}”`
+        );
+      }
     }
 
-    const test = submission.testId
-      ? ((await Test.findById(submission.testId).lean()) as ITest | null)
-      : null;
+    await syncTestCandidateFromSubmission(String(submissionId));
 
-    const assignmentTitle = test?.title?.trim() || "Project submission";
-    const baseDescription =
-      test?.description?.trim() ||
-      `Grade the submitted project for “${assignmentTitle}”. Prefer clear structure, working endpoints/features, validation, and sensible error handling.`;
-    const assignmentDescription = withGradingInstructions(baseDescription);
+    const fresh = await Submission.findById(submissionId);
+    if (!fresh) return null;
 
-    const storedCriteria = (test?.acceptanceCriteria || [])
-      .map((c) => c.trim())
-      .filter(Boolean);
-    const acceptanceCriteria =
-      storedCriteria.length > 0
-        ? storedCriteria
-        : (() => {
-            const fromDesc = criteriaFromDescription(test?.description);
-            return fromDesc.length
-              ? fromDesc
-              : [
-                  "Implements the core assignment requirements",
-                  "Code is organized into sensible modules",
-                  "Input validation and error handling are present where expected",
-                  "Dependencies and entrypoint are clear (e.g. package.json / main file)",
-                ];
-          })();
+    try {
+      const files = await extractZipSubmission(
+        String(fresh._id),
+        fresh.zipStoragePath
+      );
+      const payloadFiles = buildProjectEvalFiles(files);
+      if (!payloadFiles.length) {
+        throw new Error("No eligible text files found after extract");
+      }
 
-    const languageHint =
-      test?.languageHint?.trim() || guessLanguageHint(files) || undefined;
-    const frameworkHint =
-      test?.frameworkHint?.trim() || guessFrameworkHint(files) || undefined;
+      const test = fresh.testId
+        ? ((await Test.findById(fresh.testId).lean()) as ITest | null)
+        : null;
 
-    const result = await scoreSubmissionWithModel({
-      question_id: test ? `test-${String(submission.testId)}` : String(submission._id),
-      assignment_title: assignmentTitle,
-      assignment_description: assignmentDescription,
-      language_hint: languageHint,
-      framework_hint: frameworkHint,
-      acceptance_criteria: acceptanceCriteria,
-      rubric: test?.rubric
-        ? {
-            correctness: test.rubric.correctness,
-            code_quality: test.rubric.code_quality,
-            architecture: test.rubric.architecture,
-            best_practices: test.rubric.best_practices,
-          }
-        : DEFAULT_PROJECT_RUBRIC,
-      evaluation_mode: test?.evaluationMode || "deep",
-      max_marks: test?.maxMarks || 100,
-      use_cache: options?.useCache ?? false,
-      schema_version: PROJECT_EVAL_SCHEMA_VERSION,
-      files: payloadFiles,
-    });
+      const assignmentTitle = test?.title?.trim() || "Project submission";
+      const baseDescription =
+        test?.description?.trim() ||
+        `Grade the submitted project for “${assignmentTitle}”. Prefer clear structure, working endpoints/features, validation, and sensible error handling.`;
+      const assignmentDescription = withGradingInstructions(baseDescription);
 
-    submission.filesSentToModel = result.filesSent;
-    submission.filesSentPaths = result.filesSentPaths || payloadFiles.map((f) => f.path);
-    submission.score = result.score;
-    submission.feedback = result.feedback;
-    submission.summary = result.summary;
-    submission.criteriaResults = result.criteriaResults || [];
-    submission.scoreBreakdown = result.breakdown;
-    submission.issues = result.issues || [];
-    submission.scoreMetadata = result.metadata;
-    submission.modelRaw = result.raw.slice(0, 20_000);
-    submission.status = "completed";
-    submission.scoredAt = new Date();
-    submission.completedAt = new Date();
-    submission.error = undefined;
-    await submission.save();
-    await syncTestCandidateFromSubmission(String(submission._id));
-    return submission;
-  } catch (error) {
-    submission.status = "failed";
-    submission.error = error instanceof Error ? error.message : "Scoring failed";
-    await submission.save();
-    await syncTestCandidateFromSubmission(String(submission._id));
-    throw error;
+      const storedCriteria = (test?.acceptanceCriteria || [])
+        .map((c) => c.trim())
+        .filter(Boolean);
+      const acceptanceCriteria =
+        storedCriteria.length > 0
+          ? storedCriteria
+          : (() => {
+              const fromDesc = criteriaFromDescription(test?.description);
+              return fromDesc.length
+                ? fromDesc
+                : [
+                    "Implements the core assignment requirements",
+                    "Code is organized into sensible modules",
+                    "Input validation and error handling are present where expected",
+                    "Dependencies and entrypoint are clear (e.g. package.json / main file)",
+                  ];
+            })();
+
+      const languageHint =
+        test?.languageHint?.trim() || guessLanguageHint(files) || undefined;
+      const frameworkHint =
+        test?.frameworkHint?.trim() || guessFrameworkHint(files) || undefined;
+
+      const result = await scoreSubmissionWithModel({
+        question_id: test ? `test-${String(fresh.testId)}` : String(fresh._id),
+        assignment_title: assignmentTitle,
+        assignment_description: assignmentDescription,
+        language_hint: languageHint,
+        framework_hint: frameworkHint,
+        acceptance_criteria: acceptanceCriteria,
+        rubric: test?.rubric
+          ? {
+              correctness: test.rubric.correctness,
+              code_quality: test.rubric.code_quality,
+              architecture: test.rubric.architecture,
+              best_practices: test.rubric.best_practices,
+            }
+          : DEFAULT_PROJECT_RUBRIC,
+        evaluation_mode: test?.evaluationMode || "deep",
+        max_marks: test?.maxMarks || 100,
+        use_cache: options?.useCache ?? false,
+        schema_version: PROJECT_EVAL_SCHEMA_VERSION,
+        files: payloadFiles,
+      });
+
+      fresh.filesSentToModel = result.filesSent;
+      fresh.filesSentPaths = result.filesSentPaths || payloadFiles.map((f) => f.path);
+      fresh.score = result.score;
+      fresh.feedback = result.feedback;
+      fresh.summary = result.summary;
+      fresh.criteriaResults = result.criteriaResults || [];
+      fresh.scoreBreakdown = result.breakdown;
+      fresh.issues = result.issues || [];
+      fresh.scoreMetadata = result.metadata;
+      fresh.modelRaw = result.raw.slice(0, 20_000);
+      fresh.status = "completed";
+      fresh.scoredAt = new Date();
+      fresh.completedAt = new Date();
+      fresh.error = undefined;
+      await fresh.save();
+      await syncTestCandidateFromSubmission(String(fresh._id));
+      return fresh;
+    } catch (error) {
+      fresh.status = "failed";
+      fresh.error = error instanceof Error ? error.message : "Scoring failed";
+      await fresh.save();
+      await syncTestCandidateFromSubmission(String(fresh._id));
+      throw error;
+    }
+  } finally {
+    if (takeLock) {
+      scoringInFlight = false;
+    }
   }
 }
 
 export async function reevaluateSubmission(submissionId: string) {
   await connectMongo();
+
+  if (scoringInFlight || (await anotherScoreRunning())) {
+    throw new Error(
+      "Another submission is being scored right now. Wait for it to finish, then reevaluate."
+    );
+  }
+
   const submission = await Submission.findById(submissionId);
   if (!submission) {
     throw new Error("Submission not found");
@@ -254,39 +314,79 @@ export async function reevaluateSubmission(submissionId: string) {
   return scoreOne(String(submission._id), { useCache: false });
 }
 
+/**
+ * Single-flight queue:
+ * - At most one model score at a time (wait for response before next).
+ * - May extract the next ZIP to disk after a score finishes (no model call).
+ * - Concurrent process ticks return busy while scoring.
+ */
 export async function processSubmissionQueue() {
   await connectMongo();
 
-  const ready = await Submission.findOne({ status: "extracted" }).sort({
-    extractedAt: 1,
-  });
-  if (ready) {
-    await scoreOne(String(ready._id));
-    const nextQueued = await Submission.findOne({ status: "queued" }).sort({
-      queuedAt: 1,
-    });
-    if (nextQueued) {
-      try {
-        await extractOne(String(nextQueued._id));
-        return {
-          action: "score_and_pre_extract",
-          scoredId: String(ready._id),
-          extractedId: String(nextQueued._id),
-        };
-      } catch {
-        return { action: "score", submissionId: String(ready._id) };
+  if (scoringInFlight) {
+    return { action: "busy_scoring" as const };
+  }
+
+  const activeScore = (await Submission.findOne({ status: "scoring" })
+    .select("_id")
+    .lean()) as { _id: unknown } | null;
+  if (activeScore) {
+    return {
+      action: "busy_scoring" as const,
+      submissionId: String(activeScore._id),
+    };
+  }
+
+  // Atomically claim next extracted submission for scoring
+  const claimed = await Submission.findOneAndUpdate(
+    { status: "extracted" },
+    { $set: { status: "scoring" } },
+    { sort: { extractedAt: 1 }, new: true }
+  );
+
+  if (claimed) {
+    scoringInFlight = true;
+    try {
+      await scoreOne(String(claimed._id), {
+        useCache: false,
+        alreadyClaimed: true,
+        holdLock: false,
+      });
+
+      // After model response: pre-extract next ZIP only (still no second model call)
+      const nextQueued = await Submission.findOneAndUpdate(
+        { status: "queued" },
+        { $set: { status: "extracting" } },
+        { sort: { queuedAt: 1 }, new: true }
+      );
+      if (nextQueued) {
+        try {
+          await extractOne(String(nextQueued._id), { alreadyClaimed: true });
+          return {
+            action: "score_and_pre_extract" as const,
+            scoredId: String(claimed._id),
+            extractedId: String(nextQueued._id),
+          };
+        } catch {
+          return { action: "score" as const, submissionId: String(claimed._id) };
+        }
       }
+      return { action: "score" as const, submissionId: String(claimed._id) };
+    } finally {
+      scoringInFlight = false;
     }
-    return { action: "score", submissionId: String(ready._id) };
   }
 
-  const queued = await Submission.findOne({ status: "queued" }).sort({
-    queuedAt: 1,
-  });
-  if (queued) {
-    await extractOne(String(queued._id));
-    return { action: "extract", submissionId: String(queued._id) };
+  // Nothing to score — extract one queued ZIP so it becomes ready
+  const toExtract = await Submission.findOneAndUpdate(
+    { status: "queued" },
+    { $set: { status: "extracting" } },
+    { sort: { queuedAt: 1 }, new: true }
+  );
+  if (toExtract) {
+    await extractOne(String(toExtract._id), { alreadyClaimed: true });
+    return { action: "extract" as const, submissionId: String(toExtract._id) };
   }
 
-  return { action: "idle" };
+  return { action: "idle" as const };
 }

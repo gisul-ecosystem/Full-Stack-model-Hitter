@@ -11,6 +11,9 @@ export default function IsolatedSubmitPage() {
 
   const [testTitle, setTestTitle] = useState("");
   const [testDescription, setTestDescription] = useState("");
+  const [startsAt, setStartsAt] = useState<string | null>(null);
+  const [endsAt, setEndsAt] = useState<string | null>(null);
+  const [windowOpen, setWindowOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -23,12 +26,19 @@ export default function IsolatedSubmitPage() {
     (async () => {
       setLoading(true);
       setError(null);
+      setWindowOpen(false);
       try {
         const res = await fetch(`/api/tests/by-token/${token}`);
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Invalid link");
-        setTestTitle(data.test.title);
-        setTestDescription(data.test.description || "");
+        if (data.test?.title) setTestTitle(data.test.title);
+        if (data.test?.description) setTestDescription(data.test.description || "");
+        setStartsAt(data.test?.startsAt || null);
+        setEndsAt(data.test?.endsAt || null);
+        if (!res.ok) {
+          setWindowOpen(false);
+          throw new Error(data.error || "Invalid link");
+        }
+        setWindowOpen(true);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Invalid submission link");
       } finally {
@@ -64,9 +74,6 @@ export default function IsolatedSubmitPage() {
       setResultId(data.submission.id);
       setFile(null);
       void fetch("/api/queue/process", { method: "POST" });
-      window.setTimeout(() => {
-        void fetch("/api/queue/process", { method: "POST" });
-      }, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -82,6 +89,13 @@ export default function IsolatedSubmitPage() {
     );
   }
 
+  const windowHint = [
+    startsAt ? `Opens ${new Date(startsAt).toLocaleString()}` : null,
+    endsAt ? `Closes ${new Date(endsAt).toLocaleString()}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <main>
       <PageHeader
@@ -93,6 +107,10 @@ export default function IsolatedSubmitPage() {
         }
       />
 
+      {windowHint && (
+        <p className="mb-4 text-sm text-[var(--muted)]">{windowHint}</p>
+      )}
+
       {error && <AlertBanner tone="error">{error}</AlertBanner>}
       {resultId && (
         <AlertBanner tone="success">
@@ -100,7 +118,7 @@ export default function IsolatedSubmitPage() {
         </AlertBanner>
       )}
 
-      {!error || resultId || testTitle ? (
+      {windowOpen ? (
         <Panel title="Upload ZIP">
           <form onSubmit={handleSubmit} className="mx-auto max-w-xl space-y-4">
             <label className="block text-sm">
@@ -122,7 +140,7 @@ export default function IsolatedSubmitPage() {
                 required
               />
               <span className="mt-1 block text-xs text-[var(--muted)]">
-                Must match a candidate invited to this test.
+                Must match a candidate invited to this test. Only one ZIP submission is allowed.
               </span>
             </label>
             <label className="block text-sm">
@@ -145,11 +163,16 @@ export default function IsolatedSubmitPage() {
           </form>
         </Panel>
       ) : (
-        <p className="text-sm text-[var(--muted)]">
-          <Link href="/" className="text-[var(--accent)] underline">
-            Go home
-          </Link>
-        </p>
+        <Panel title="Submission closed">
+          <p className="m-0 text-sm text-[var(--muted)]">
+            {error || "This submission link is not accepting uploads right now."}
+          </p>
+          <p className="mt-3 mb-0 text-sm">
+            <Link href="/" className="text-[var(--accent)] underline">
+              Go home
+            </Link>
+          </p>
+        </Panel>
       )}
     </main>
   );

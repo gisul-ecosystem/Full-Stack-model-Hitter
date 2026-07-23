@@ -23,6 +23,10 @@ export interface ITest {
   };
   maxMarks: number;
   evaluationMode: "deep" | "fast";
+  /** Submissions allowed from this time (inclusive). Optional = no start gate. */
+  startsAt?: Date;
+  /** Submissions allowed until this time (inclusive). Optional = no end gate. */
+  endsAt?: Date;
   submitToken: string;
   subjectTemplate: string;
   bodyTemplate: string;
@@ -56,6 +60,8 @@ const TestSchema = new Schema<ITest>(
       enum: ["deep", "fast"],
       default: "deep",
     },
+    startsAt: { type: Date },
+    endsAt: { type: Date },
     submitToken: { type: String, required: true, unique: true, index: true },
     subjectTemplate: { type: String, required: true },
     bodyTemplate: { type: String, required: true },
