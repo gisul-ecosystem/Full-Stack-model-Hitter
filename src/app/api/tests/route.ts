@@ -1,10 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectMongo } from "@/lib/mongodb";
-import { Test } from "@/lib/models/Test";
+import { DEFAULT_PROJECT_RUBRIC, Test } from "@/lib/models/Test";
 import { DEFAULT_BODY, DEFAULT_SUBJECT } from "@/lib/email-template";
 import { createSubmitToken } from "@/lib/tokens";
 
 export const runtime = "nodejs";
+
+function parseCriteria(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((c) => String(c || "").trim()).filter(Boolean);
+  }
+  if (typeof raw === "string") {
+    return raw
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^[-*•]\s*/, "").trim())
+      .filter(Boolean);
+  }
+  return [];
+}
 
 export async function GET() {
   try {
@@ -23,6 +36,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const title = String(body.title || "").trim();
     const description = String(body.description || "").trim();
+    const acceptanceCriteria = parseCriteria(body.acceptanceCriteria);
+    const languageHint = String(body.languageHint || "").trim();
+    const frameworkHint = String(body.frameworkHint || "").trim();
 
     if (!title) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -38,6 +54,12 @@ export async function POST(request: NextRequest) {
     const test = await Test.create({
       title,
       description: description || undefined,
+      acceptanceCriteria,
+      languageHint: languageHint || undefined,
+      frameworkHint: frameworkHint || undefined,
+      rubric: { ...DEFAULT_PROJECT_RUBRIC },
+      maxMarks: 100,
+      evaluationMode: "deep",
       submitToken,
       subjectTemplate: DEFAULT_SUBJECT,
       bodyTemplate: DEFAULT_BODY,

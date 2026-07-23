@@ -3,7 +3,12 @@ import { Test, type ITest } from "@/lib/models/Test";
 import { TestCandidate } from "@/lib/models/TestCandidate";
 import { Submission } from "@/lib/models/Submission";
 import { buildProjectEvalFiles, extractZipSubmission } from "@/lib/extract-zip";
-import { scoreSubmissionWithModel } from "@/lib/model-client";
+import { withGradingInstructions } from "@/lib/grading-instructions";
+import {
+  DEFAULT_PROJECT_RUBRIC,
+  PROJECT_EVAL_SCHEMA_VERSION,
+  scoreSubmissionWithModel,
+} from "@/lib/model-client";
 
 function guessLanguageHint(files: { path: string; language?: string }[]) {
   const counts = new Map<string, number>();
@@ -25,7 +30,12 @@ function guessLanguageHint(files: { path: string; language?: string }[]) {
 
 function guessFrameworkHint(files: { path: string; content?: string }[]) {
   const joined = files
-    .filter((f) => /package\.json$/i.test(f.path) || /requirements\.txt$/i.test(f.path))
+    .filter(
+      (f) =>
+        /package\.json$/i.test(f.path) ||
+        /requirements\.txt$/i.test(f.path) ||
+        /app\.py$/i.test(f.path)
+    )
     .map((f) => f.content || "")
     .join("\n")
     .toLowerCase();
@@ -33,9 +43,18 @@ function guessFrameworkHint(files: { path: string; content?: string }[]) {
   if (joined.includes("next")) return "nextjs";
   if (joined.includes("react")) return "react";
   if (joined.includes("fastapi")) return "fastapi";
-  if (joined.includes("django")) return "django";
   if (joined.includes("flask")) return "flask";
+  if (joined.includes("django")) return "django";
   return undefined;
+}
+
+function criteriaFromDescription(description?: string): string[] {
+  if (!description?.trim()) return [];
+  return description
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[-*•]\s*/, "").trim())
+    .filter((line) => line.length >= 8 && line.length <= 200)
+    .slice(0, 8);
 }
 
 async function syncTestCandidateFromSubmission(submissionId: string) {
@@ -124,28 +143,69 @@ export async function scoreOne(
     }
 
     const test = submission.testId
-      ? ((await Test.findById(submission.testId)
-          .select("title description")
-          .lean()) as Pick<ITest, "title" | "description"> | null)
+      ? ((await Test.findById(submission.testId).lean()) as ITest | null)
       : null;
-    const languageHint = guessLanguageHint(files);
-    const frameworkHint = guessFrameworkHint(files);
+
+    const assignmentTitle = test?.title?.trim() || "Project submission";
+    const baseDescription =
+      test?.description?.trim() ||
+      `Grade the submitted project for “${assignmentTitle}”. Prefer clear structure, working endpoints/features, validation, and sensible error handling.`;
+    const assignmentDescription = withGradingInstructions(baseDescription);
+
+    const storedCriteria = (test?.acceptanceCriteria || [])
+      .map((c) => c.trim())
+      .filter(Boolean);
+    const acceptanceCriteria =
+      storedCriteria.length > 0
+        ? storedCriteria
+        : (() => {
+            const fromDesc = criteriaFromDescription(test?.description);
+            return fromDesc.length
+              ? fromDesc
+              : [
+                  "Implements the core assignment requirements",
+                  "Code is organized into sensible modules",
+                  "Input validation and error handling are present where expected",
+                  "Dependencies and entrypoint are clear (e.g. package.json / main file)",
+                ];
+          })();
+
+    const languageHint =
+      test?.languageHint?.trim() || guessLanguageHint(files) || undefined;
+    const frameworkHint =
+      test?.frameworkHint?.trim() || guessFrameworkHint(files) || undefined;
 
     const result = await scoreSubmissionWithModel({
-      question_id: String(submission._id),
-      assignment_title: test?.title || undefined,
-      assignment_description: test?.description || undefined,
+      question_id: test ? `test-${String(submission.testId)}` : String(submission._id),
+      assignment_title: assignmentTitle,
+      assignment_description: assignmentDescription,
       language_hint: languageHint,
       framework_hint: frameworkHint,
-      evaluation_mode: "deep",
+      acceptance_criteria: acceptanceCriteria,
+      rubric: test?.rubric
+        ? {
+            correctness: test.rubric.correctness,
+            code_quality: test.rubric.code_quality,
+            architecture: test.rubric.architecture,
+            best_practices: test.rubric.best_practices,
+          }
+        : DEFAULT_PROJECT_RUBRIC,
+      evaluation_mode: test?.evaluationMode || "deep",
+      max_marks: test?.maxMarks || 100,
+      use_cache: options?.useCache ?? false,
+      schema_version: PROJECT_EVAL_SCHEMA_VERSION,
       files: payloadFiles,
-      max_marks: 100,
-      use_cache: options?.useCache ?? true,
     });
 
     submission.filesSentToModel = result.filesSent;
+    submission.filesSentPaths = result.filesSentPaths || payloadFiles.map((f) => f.path);
     submission.score = result.score;
     submission.feedback = result.feedback;
+    submission.summary = result.summary;
+    submission.criteriaResults = result.criteriaResults || [];
+    submission.scoreBreakdown = result.breakdown;
+    submission.issues = result.issues || [];
+    submission.scoreMetadata = result.metadata;
     submission.modelRaw = result.raw.slice(0, 20_000);
     submission.status = "completed";
     submission.scoredAt = new Date();
@@ -175,11 +235,17 @@ export async function reevaluateSubmission(submissionId: string) {
 
   submission.score = undefined;
   submission.feedback = undefined;
+  submission.summary = undefined;
+  submission.criteriaResults = [];
+  submission.scoreBreakdown = undefined;
+  submission.issues = [];
+  submission.scoreMetadata = undefined;
   submission.modelRaw = undefined;
   submission.error = undefined;
   submission.scoredAt = undefined;
   submission.completedAt = undefined;
   submission.filesSentToModel = 0;
+  submission.filesSentPaths = [];
   submission.status = "extracted";
   submission.extractedAt = new Date();
   await submission.save();

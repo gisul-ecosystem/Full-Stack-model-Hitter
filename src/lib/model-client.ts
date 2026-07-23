@@ -3,15 +3,61 @@ export type ProjectEvalFile = {
   content: string;
 };
 
+export type ModelScoreIssue = {
+  severity?: string;
+  category?: string;
+  path?: string;
+  issue?: string;
+  why_it_matters?: string;
+  fix?: string;
+  rubric_link?: string;
+};
+
+export type ModelScoreCriterion = {
+  criterion?: string;
+  status?: string;
+  score?: number;
+  detail?: string;
+  evidence_paths?: string[];
+};
+
+export type ModelScoreBreakdown = Record<
+  string,
+  { score?: number; weight?: number; comments?: string }
+>;
+
+export type ModelScoreMetadata = {
+  files_received?: number;
+  files_after_filter?: number;
+  files_used_in_prompt?: number;
+  evaluation_mode?: string;
+  grading_status?: string;
+  cache_hit?: boolean;
+  test_anchored?: boolean;
+  truncated?: boolean;
+};
+
 export type ModelScoreResult = {
   score: number;
   feedback: string;
   summary?: string;
   raw: string;
   filesSent: number;
+  filesSentPaths?: string[];
   jobId?: string;
-  breakdown?: unknown;
-  criteriaResults?: unknown;
+  breakdown?: ModelScoreBreakdown;
+  criteriaResults?: ModelScoreCriterion[];
+  issues?: ModelScoreIssue[];
+  metadata?: ModelScoreMetadata;
+};
+
+export type ProjectEvalTestSummary = {
+  total_tests: number;
+  total_passed: number;
+  public_total?: number;
+  public_passed?: number;
+  hidden_total?: number;
+  hidden_passed?: number;
 };
 
 export type ProjectEvalRequest = {
@@ -20,17 +66,24 @@ export type ProjectEvalRequest = {
   assignment_description?: string;
   language_hint?: string;
   framework_hint?: string;
-  evaluation_mode?: "deep" | "fast";
   acceptance_criteria?: string[];
   rubric?: Record<string, number>;
-  test_summary?: {
-    total_tests: number;
-    total_passed: number;
-  };
-  files: ProjectEvalFile[];
+  evaluation_mode?: "deep" | "fast";
   max_marks?: number;
   use_cache?: boolean;
+  schema_version?: string;
+  test_summary?: ProjectEvalTestSummary;
+  files: ProjectEvalFile[];
 };
+
+export const DEFAULT_PROJECT_RUBRIC: Record<string, number> = {
+  correctness: 0.4,
+  code_quality: 0.25,
+  architecture: 0.2,
+  best_practices: 0.15,
+};
+
+export const PROJECT_EVAL_SCHEMA_VERSION = "project_eval.v2";
 
 type FeedbackStrength =
   | string
@@ -40,15 +93,7 @@ type FeedbackStrength =
       evidence_paths?: string[];
     };
 
-type FeedbackIssue = {
-  severity?: string;
-  category?: string;
-  path?: string;
-  issue?: string;
-  why_it_matters?: string;
-  fix?: string;
-  rubric_link?: string;
-};
+type FeedbackIssue = ModelScoreIssue;
 
 type FeedbackSuggestion =
   | string
@@ -64,25 +109,19 @@ type ProjectEvalResult = {
   score_in_marks?: number;
   percentage?: number;
   max_marks?: number;
-  score_breakdown?: Record<
-    string,
-    { score?: number; weight?: number; comments?: string }
-  >;
-  criteria_results?: {
-    criterion?: string;
-    status?: string;
-    score?: number;
-    detail?: string;
-    evidence_paths?: string[];
-  }[];
+  score_breakdown?: ModelScoreBreakdown;
+  criteria_results?: ModelScoreCriterion[];
   feedback?: {
     summary?: string;
     strengths?: FeedbackStrength[];
     weaknesses?: string[];
-    issues?: FeedbackIssue[];
+    strengths_flat?: string[];
+    suggestions_flat?: string[];
+    issues?: ModelScoreIssue[];
     suggestions?: FeedbackSuggestion[];
     file_notes?: { path?: string; note?: string }[];
   };
+  metadata?: ModelScoreMetadata;
 };
 
 type JobPollResponse = {
@@ -130,7 +169,11 @@ function formatFeedback(result: ProjectEvalResult): string {
   if (fb.summary) parts.push(fb.summary);
 
   const strengths = (fb.strengths || []).map(formatStrength).filter(Boolean);
-  if (strengths.length) parts.push(`Strengths:\n- ${strengths.join("\n- ")}`);
+  if (strengths.length) {
+    parts.push(`Strengths:\n- ${strengths.join("\n- ")}`);
+  } else if (fb.strengths_flat?.length) {
+    parts.push(`Strengths:\n- ${fb.strengths_flat.join("\n- ")}`);
+  }
 
   const issues = (fb.issues || []).map(formatIssue).filter(Boolean);
   if (issues.length) {
@@ -142,6 +185,8 @@ function formatFeedback(result: ProjectEvalResult): string {
   const suggestions = (fb.suggestions || []).map(formatSuggestion).filter(Boolean);
   if (suggestions.length) {
     parts.push(`Suggestions:\n- ${suggestions.join("\n- ")}`);
+  } else if (fb.suggestions_flat?.length) {
+    parts.push(`Suggestions:\n- ${fb.suggestions_flat.join("\n- ")}`);
   }
 
   if (fb.file_notes?.length) {
@@ -188,6 +233,19 @@ async function readJson(res: Response) {
 
 function errorDetail(json: Record<string, unknown> | null, text: string) {
   if (!json) return text.slice(0, 400);
+
+  const detail = json.detail;
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object") {
+    const d = detail as { error?: unknown; message?: unknown; hint?: unknown };
+    const bits = [
+      typeof d.error === "string" ? d.error : "",
+      typeof d.message === "string" ? d.message : "",
+      typeof d.hint === "string" ? d.hint : "",
+    ].filter(Boolean);
+    if (bits.length) return bits.join(" — ");
+  }
+
   const err = json.error;
   if (typeof err === "string") return err;
   if (err && typeof err === "object" && "message" in err) {
@@ -201,7 +259,8 @@ function parseCompletedResult(
   result: ProjectEvalResult,
   filesSent: number,
   jobId?: string,
-  rawSource?: unknown
+  rawSource?: unknown,
+  filesSentPaths?: string[]
 ): ModelScoreResult {
   const rawScore =
     result.overall_score ?? result.score_in_marks ?? result.percentage ?? NaN;
@@ -209,15 +268,24 @@ function parseCompletedResult(
     throw new Error("Model response missing overall_score");
   }
 
+  const rawObj =
+    rawSource && typeof rawSource === "object"
+      ? (rawSource as { result?: ProjectEvalResult; metadata?: ModelScoreMetadata })
+      : null;
+  const metadata = result.metadata || rawObj?.result?.metadata || rawObj?.metadata;
+
   return {
     score: Math.max(0, Math.min(100, Math.round(Number(rawScore)))),
     feedback: formatFeedback(result),
     summary: result.feedback?.summary,
     raw: JSON.stringify(rawSource ?? result).slice(0, 50_000),
     filesSent,
+    filesSentPaths,
     jobId,
     breakdown: result.score_breakdown,
     criteriaResults: result.criteria_results,
+    issues: result.feedback?.issues || [],
+    metadata,
   };
 }
 
@@ -226,6 +294,7 @@ export async function scoreSubmissionWithModel(
 ): Promise<ModelScoreResult> {
   const baseUrl = getModelBaseUrl();
   const filesSent = request.files.length;
+  const filesSentPaths = request.files.map((f) => f.path);
 
   if (!filesSent) {
     throw new Error("No text files to send for scoring");
@@ -238,7 +307,7 @@ export async function scoreSubmissionWithModel(
         "MODEL_SCORING_DISABLED=1. Placeholder score based on extracted file count.",
       summary: "Placeholder scoring",
     };
-    return { ...fake, raw: JSON.stringify(fake), filesSent };
+    return { ...fake, raw: JSON.stringify(fake), filesSent, filesSentPaths };
   }
 
   const payload = {
@@ -247,13 +316,15 @@ export async function scoreSubmissionWithModel(
     assignment_description: request.assignment_description,
     language_hint: request.language_hint,
     framework_hint: request.framework_hint,
-    evaluation_mode: request.evaluation_mode || "deep",
     acceptance_criteria: request.acceptance_criteria,
-    rubric: request.rubric,
+    rubric: request.rubric || DEFAULT_PROJECT_RUBRIC,
+    evaluation_mode: request.evaluation_mode || "deep",
+    max_marks: request.max_marks ?? 100,
+    // Default false for verify/first runs; callers may opt into cache.
+    use_cache: request.use_cache ?? false,
+    schema_version: request.schema_version || PROJECT_EVAL_SCHEMA_VERSION,
     test_summary: request.test_summary,
     files: request.files,
-    max_marks: request.max_marks ?? 100,
-    use_cache: request.use_cache ?? true,
   };
 
   // Preferred: async submit + poll (no auth headers)
@@ -271,7 +342,7 @@ export async function scoreSubmissionWithModel(
   if (!submitRes.ok) {
     const detail = errorDetail(submitted.json, submitted.text);
     if (submitRes.status === 503) {
-      throw new Error(`Model backlog full (503). Retry later. ${detail}`);
+      throw new Error(`Model eval failed (503). ${detail}`);
     }
     if (submitRes.status === 401) {
       throw new Error(
@@ -322,7 +393,13 @@ export async function scoreSubmissionWithModel(
     }
 
     if (status === "complete" || status === "completed" || status === "success") {
-      return parseCompletedResult(job.result || {}, filesSent, jobId, polled.json);
+      return parseCompletedResult(
+        job.result || {},
+        filesSent,
+        jobId,
+        polled.json,
+        filesSentPaths
+      );
     }
 
     // pending | processing | queued → keep polling

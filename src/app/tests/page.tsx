@@ -20,6 +20,9 @@ export default function TestsPage() {
   const [tests, setTests] = useState<TestRow[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState("");
+  const [languageHint, setLanguageHint] = useState("");
+  const [frameworkHint, setFrameworkHint] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,12 +60,21 @@ export default function TestsPage() {
       const res = await fetch("/api/tests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, description }),
+        body: JSON.stringify({
+          title,
+          description,
+          acceptanceCriteria,
+          languageHint,
+          frameworkHint,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Create failed");
       setTitle("");
       setDescription("");
+      setAcceptanceCriteria("");
+      setLanguageHint("");
+      setFrameworkHint("");
       setMessage(`Created “${data.test.title}”. Open it to add candidates.`);
       await load();
     } catch (err) {
@@ -96,14 +108,47 @@ export default function TestsPage() {
             />
           </label>
           <label className="block text-sm">
-            Description (optional)
+            Assignment description
             <textarea
               rows={3}
               className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              placeholder="Build an Express Todo API with full CRUD on /todos, input validation, and central error handling."
             />
           </label>
+          <label className="block text-sm">
+            Acceptance criteria (one per line)
+            <textarea
+              rows={4}
+              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 font-mono text-[0.9rem]"
+              value={acceptanceCriteria}
+              onChange={(e) => setAcceptanceCriteria(e.target.value)}
+              placeholder={
+                "CRUD endpoints for todos (GET/POST/PUT/DELETE)\nInput validation on create/update\nError-handling middleware\nRoutes separated from app entrypoint"
+              }
+            />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm">
+              Language hint
+              <input
+                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2"
+                value={languageHint}
+                onChange={(e) => setLanguageHint(e.target.value)}
+                placeholder="javascript"
+              />
+            </label>
+            <label className="block text-sm">
+              Framework hint
+              <input
+                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2"
+                value={frameworkHint}
+                onChange={(e) => setFrameworkHint(e.target.value)}
+                placeholder="express"
+              />
+            </label>
+          </div>
           <button
             type="submit"
             disabled={busy}

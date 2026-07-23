@@ -8,6 +8,19 @@ export const runtime = "nodejs";
 
 type Params = { params: Promise<{ id: string }> };
 
+function parseCriteria(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((c) => String(c || "").trim()).filter(Boolean);
+  }
+  if (typeof raw === "string") {
+    return raw
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^[-*•]\s*/, "").trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
 export async function GET(request: NextRequest, { params }: Params) {
   try {
     await connectMongo();
@@ -49,6 +62,21 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
     if (typeof body.description === "string") {
       test.description = body.description.trim();
+    }
+    if (body.acceptanceCriteria !== undefined) {
+      test.acceptanceCriteria = parseCriteria(body.acceptanceCriteria);
+    }
+    if (typeof body.languageHint === "string") {
+      test.languageHint = body.languageHint.trim() || undefined;
+    }
+    if (typeof body.frameworkHint === "string") {
+      test.frameworkHint = body.frameworkHint.trim() || undefined;
+    }
+    if (typeof body.maxMarks === "number" && body.maxMarks > 0) {
+      test.maxMarks = body.maxMarks;
+    }
+    if (body.evaluationMode === "deep" || body.evaluationMode === "fast") {
+      test.evaluationMode = body.evaluationMode;
     }
     if (typeof body.subjectTemplate === "string" && body.subjectTemplate.trim()) {
       test.subjectTemplate = body.subjectTemplate.trim();

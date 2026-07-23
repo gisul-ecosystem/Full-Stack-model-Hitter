@@ -10,6 +10,10 @@ type TestDto = {
   _id: string;
   title: string;
   description?: string;
+  acceptanceCriteria?: string[];
+  languageHint?: string;
+  frameworkHint?: string;
+  evaluationMode?: "deep" | "fast";
   status: string;
   submitToken: string;
   candidateCount: number;
@@ -169,6 +173,10 @@ export default function TestDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [gradeDescription, setGradeDescription] = useState("");
+  const [gradeCriteria, setGradeCriteria] = useState("");
+  const [gradeLanguage, setGradeLanguage] = useState("");
+  const [gradeFramework, setGradeFramework] = useState("");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -181,6 +189,10 @@ export default function TestDetailPage() {
       setTest(testData.test);
       setCandidates(testData.candidates || []);
       setSubmissionUrl(testData.submissionUrl || "");
+      setGradeDescription(testData.test?.description || "");
+      setGradeCriteria((testData.test?.acceptanceCriteria || []).join("\n"));
+      setGradeLanguage(testData.test?.languageHint || "");
+      setGradeFramework(testData.test?.frameworkHint || "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
@@ -292,6 +304,36 @@ export default function TestDetailPage() {
     if (!submissionUrl) return;
     await navigator.clipboard.writeText(submissionUrl);
     setMessage("Test URL copied.");
+  }
+
+  async function saveGradingSettings() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/tests/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: gradeDescription,
+          acceptanceCriteria: gradeCriteria,
+          languageHint: gradeLanguage,
+          frameworkHint: gradeFramework,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save grading settings");
+      setTest(data.test);
+      setGradeDescription(data.test?.description || "");
+      setGradeCriteria((data.test?.acceptanceCriteria || []).join("\n"));
+      setGradeLanguage(data.test?.languageHint || "");
+      setGradeFramework(data.test?.frameworkHint || "");
+      setMessage("Grading settings saved. New scores will use this rubric.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save grading settings");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function sendEmailToAll() {
@@ -475,6 +517,71 @@ export default function TestDetailPage() {
             className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-red-300 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
           >
             <IconTrash /> Delete Assessment
+          </button>
+        </div>
+      </section>
+
+      {/* Model grading (project_eval.v2) */}
+      <section className="mb-5 rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <h2 className="m-0 text-[1.1rem] font-bold text-slate-900">Model grading</h2>
+          <p className="mt-1 mb-0 text-sm text-slate-500">
+            Sent with each ZIP as curated source files (≤20). Deep mode on 8GB works best with a clear description and acceptance criteria.
+          </p>
+          {gradeCriteria.trim().split(/\r?\n/).filter((l) => l.trim()).length < 2 && (
+            <p className="mt-2 mb-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Add explicit acceptance criteria (one per line). Vague or empty criteria produce unreliable grades — don’t trust a score without criteria_results covering every line.
+            </p>
+          )}
+        </div>
+        <div className="grid max-w-3xl gap-3">
+          <label className="block text-sm font-medium text-slate-700">
+            Assignment description
+            <textarea
+              rows={3}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-normal text-slate-800"
+              value={gradeDescription}
+              onChange={(e) => setGradeDescription(e.target.value)}
+              placeholder="Build an Express Todo API with full CRUD…"
+            />
+          </label>
+          <label className="block text-sm font-medium text-slate-700">
+            Acceptance criteria (one per line)
+            <textarea
+              rows={5}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-[0.9rem] font-normal text-slate-800"
+              value={gradeCriteria}
+              onChange={(e) => setGradeCriteria(e.target.value)}
+              placeholder={"CRUD endpoints…\nInput validation…"}
+            />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm font-medium text-slate-700">
+              Language hint
+              <input
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-normal"
+                value={gradeLanguage}
+                onChange={(e) => setGradeLanguage(e.target.value)}
+                placeholder="javascript"
+              />
+            </label>
+            <label className="block text-sm font-medium text-slate-700">
+              Framework hint
+              <input
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-normal"
+                value={gradeFramework}
+                onChange={(e) => setGradeFramework(e.target.value)}
+                placeholder="express"
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={saveGradingSettings}
+            className="w-fit rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+          >
+            {busy ? "Saving…" : "Save grading settings"}
           </button>
         </div>
       </section>

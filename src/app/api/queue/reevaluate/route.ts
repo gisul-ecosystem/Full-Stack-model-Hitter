@@ -22,6 +22,12 @@ export async function POST(request: NextRequest) {
             status: submission.status,
             score: submission.score,
             feedback: submission.feedback,
+            summary: submission.summary,
+            criteriaResults: submission.criteriaResults,
+            scoreBreakdown: submission.scoreBreakdown,
+            issues: submission.issues,
+            scoreMetadata: submission.scoreMetadata,
+            filesSentPaths: submission.filesSentPaths,
             error: submission.error,
             filesSentToModel: submission.filesSentToModel,
           }

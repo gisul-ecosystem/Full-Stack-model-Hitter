@@ -14,6 +14,41 @@ export interface IExtractedFile {
   language?: string;
 }
 
+export interface ICriterionResult {
+  criterion?: string;
+  status?: string;
+  score?: number;
+  detail?: string;
+  evidence_paths?: string[];
+}
+
+export interface IScoreIssue {
+  severity?: string;
+  category?: string;
+  path?: string;
+  issue?: string;
+  why_it_matters?: string;
+  fix?: string;
+  rubric_link?: string;
+}
+
+export interface IScoreBreakdownItem {
+  score?: number;
+  weight?: number;
+  comments?: string;
+}
+
+export interface IScoreMetadata {
+  files_received?: number;
+  files_after_filter?: number;
+  files_used_in_prompt?: number;
+  evaluation_mode?: string;
+  grading_status?: string;
+  cache_hit?: boolean;
+  test_anchored?: boolean;
+  truncated?: boolean;
+}
+
 export interface ISubmission {
   name: string;
   email: string;
@@ -25,9 +60,15 @@ export interface ISubmission {
   status: SubmissionStatus;
   filesExtracted: number;
   filesSentToModel: number;
+  filesSentPaths: string[];
   extractedFiles: IExtractedFile[];
   score?: number;
   feedback?: string;
+  summary?: string;
+  criteriaResults: ICriterionResult[];
+  scoreBreakdown?: Record<string, IScoreBreakdownItem>;
+  issues: IScoreIssue[];
+  scoreMetadata?: IScoreMetadata;
   modelRaw?: string;
   error?: string;
   queuedAt: Date;
@@ -43,6 +84,30 @@ const ExtractedFileSchema = new Schema<IExtractedFile>(
     path: { type: String, required: true },
     size: { type: Number, required: true },
     language: { type: String },
+  },
+  { _id: false }
+);
+
+const CriterionResultSchema = new Schema<ICriterionResult>(
+  {
+    criterion: { type: String },
+    status: { type: String },
+    score: { type: Number },
+    detail: { type: String },
+    evidence_paths: { type: [String], default: [] },
+  },
+  { _id: false }
+);
+
+const ScoreIssueSchema = new Schema<IScoreIssue>(
+  {
+    severity: { type: String },
+    category: { type: String },
+    path: { type: String },
+    issue: { type: String },
+    why_it_matters: { type: String },
+    fix: { type: String },
+    rubric_link: { type: String },
   },
   { _id: false }
 );
@@ -69,9 +134,15 @@ const SubmissionSchema = new Schema<ISubmission>(
     },
     filesExtracted: { type: Number, default: 0 },
     filesSentToModel: { type: Number, default: 0 },
+    filesSentPaths: { type: [String], default: [] },
     extractedFiles: { type: [ExtractedFileSchema], default: [] },
     score: { type: Number },
     feedback: { type: String },
+    summary: { type: String },
+    criteriaResults: { type: [CriterionResultSchema], default: [] },
+    scoreBreakdown: { type: Schema.Types.Mixed },
+    issues: { type: [ScoreIssueSchema], default: [] },
+    scoreMetadata: { type: Schema.Types.Mixed },
     modelRaw: { type: String },
     error: { type: String },
     queuedAt: { type: Date, default: Date.now },

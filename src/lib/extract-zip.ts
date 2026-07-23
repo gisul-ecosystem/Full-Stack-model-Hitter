@@ -15,10 +15,69 @@ export type ExtractedFileInfo = {
 };
 
 const MAX_FILES = 80;
+/** 8GB GPU deep mode: keep payloads small (prefer ≤15–20 source files). */
+const MAX_EVAL_FILES = 20;
 const MAX_FILE_BYTES = 200_000;
-const MAX_FILE_CHARS = 12_000;
-const MAX_TOTAL_CHARS = 2_000_000;
+const MAX_FILE_CHARS = 10_000;
+const MAX_TOTAL_CHARS = 180_000;
 const MAX_TOTAL_PROMPT_CHARS = 40_000;
+
+const MANIFEST_NAMES = new Set([
+  "package.json",
+  "requirements.txt",
+  "pyproject.toml",
+  "cargo.toml",
+  "go.mod",
+  "pom.xml",
+  "build.gradle",
+  "composer.json",
+  "gemfile",
+]);
+
+const ENTRY_BASENAMES = new Set([
+  "index.js",
+  "index.ts",
+  "main.js",
+  "main.ts",
+  "main.py",
+  "app.js",
+  "app.ts",
+  "app.py",
+  "server.js",
+  "server.ts",
+  "manage.py",
+]);
+
+function basenameLower(rel: string) {
+  const parts = rel.replace(/\\/g, "/").split("/");
+  return (parts[parts.length - 1] || "").toLowerCase();
+}
+
+/** Higher = more useful for deep grading on small GPUs. */
+function filePriority(rel: string): number {
+  const path = rel.replace(/\\/g, "/");
+  const base = basenameLower(path);
+  let score = 0;
+
+  if (MANIFEST_NAMES.has(base)) score += 100;
+  if (ENTRY_BASENAMES.has(base)) score += 80;
+  if (/(^|\/)(src|app|lib|routes|controllers|models|api|server)\//i.test(path)) {
+    score += 40;
+  }
+  // Prefer route modules so planted bugs (e.g. routes/notes.py) are not dropped.
+  if (/(^|\/)routes\/[^/]+\.(js|jsx|ts|tsx|py)$/i.test(path)) score += 35;
+  if (/\.(js|jsx|ts|tsx|py|go|java|rb|php|cs)$/i.test(base)) score += 25;
+  if (/\.(json|yml|yaml|toml)$/i.test(base) && !MANIFEST_NAMES.has(base)) score += 10;
+  if (/\.(md|txt)$/i.test(base)) score -= 20;
+  if (/(^|\/)(test|tests|__tests__|spec|docs|examples)\//i.test(path)) score -= 15;
+  if (base === "readme.md" || base.startsWith("readme.")) score -= 30;
+
+  // Prefer shallower paths slightly
+  const depth = path.split("/").length;
+  score -= Math.min(depth, 6);
+
+  return score;
+}
 
 export async function extractZipSubmission(
   submissionId: string,
@@ -92,25 +151,29 @@ export function buildProjectEvalFiles(files: ExtractedFileInfo[]): {
   path: string;
   content: string;
 }[] {
+  const ranked = files
+    .map((file) => {
+      const rel = String(file.path || "")
+        .replace(/\\/g, "/")
+        .replace(/^\/+/, "");
+      return { file, rel, priority: filePriority(rel) };
+    })
+    .filter(({ rel, file }) => Boolean(rel && !rel.includes("..") && file.content))
+    .sort((a, b) => b.priority - a.priority || a.rel.localeCompare(b.rel));
+
   const out: { path: string; content: string }[] = [];
   let total = 0;
 
-  for (const file of files) {
-    const rel = String(file.path || "")
-      .replace(/\\/g, "/")
-      .replace(/^\/+/, "");
-    if (!rel || rel.includes("..")) continue;
-    if (!file.content) continue;
-
-    let content = file.content;
+  for (const { file, rel } of ranked) {
+    let content = file.content || "";
     if (content.length > MAX_FILE_CHARS) {
       content = `${content.slice(0, MAX_FILE_CHARS)}\n/* truncated */`;
     }
-    if (total + content.length > MAX_TOTAL_CHARS) break;
+    if (total + content.length > MAX_TOTAL_CHARS) continue;
 
     out.push({ path: rel, content });
     total += content.length;
-    if (out.length >= MAX_FILES) break;
+    if (out.length >= MAX_EVAL_FILES) break;
   }
 
   return out;
