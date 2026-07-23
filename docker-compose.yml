@@ -31,15 +31,15 @@ services:
       APP_BASE_URL: ${APP_BASE_URL:-https://submit.aaptor.com}
 
       # ZeptoMail (Zoho) — Send Mail API
-      ZEPTOMAIL_API_KEY: PHtE6r0OSuno3jEr+xIB5fS5R5LwMt4mr7w1LAJGuYgRCaMAS00A/dF+mj7mqE8rVPkRRvabz49rsumetbmCJWnrNG8fDWqyqK3sx/VYSPOZsbq6x00Zs1kfdEbYUI7sdt5p0CDSuN/eNA==
-      ZEPTOMAIL_FROM_EMAIL: info@aaptor.com
+      ZEPTOMAIL_API_KEY: "PHtE6r0OSuno3jEr+xIB5fS5R5LwMt4mr7w1LAJGuYgRCaMAS00A/dF+mj7mqE8rVPkRRvabz49rsumetbmCJWnrNG8fDWqyqK3sx/VYSPOZsbq6x00Zs1kfdEbYUI7sdt5p0CDSuN/eNA=="
+      ZEPTOMAIL_FROM_EMAIL: "info@aaptor.com"
       ZEPTOMAIL_FROM_NAME: Aaptor
       ZEPTOMAIL_API_URL: https://api.zeptomail.in/v1.1/email
-      NOTIFICATION_EMAIL: info@aaptor.com
+      NOTIFICATION_EMAIL: "info@aaptor.com"
 
-      AUTH_EMAIL: info@aaptor.com
-      AUTH_PASSWORD: Aaptor@123
-      AUTH_SECRET=i1+A4nAwVp1MI2CTyaErjtq6h3tK6JUNkUzCRzydj7M=
+      AUTH_EMAIL: "info@aaptor.com"
+      AUTH_PASSWORD: "Aaptor@123"
+      AUTH_SECRET: "i1+A4nAwVp1MI2CTyaErjtq6h3tK6JUNkUzCRzydj7M="
 
       # Model scoring — async project eval (no API key / org headers)
       MODEL_API_URL: https://model.aaptor.com
