@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
 import { AlertBanner, PageHeader, Panel } from "@/components/ui";
 import { formatIstLabel } from "@/lib/ist";
 
@@ -167,11 +166,6 @@ export default function IsolatedSubmitPage() {
         <Panel title="Submission closed">
           <p className="m-0 text-sm text-[var(--muted)]">
             {error || "This submission link is not accepting uploads right now."}
-          </p>
-          <p className="mt-3 mb-0 text-sm">
-            <Link href="/" className="text-[var(--accent)] underline">
-              Go home
-            </Link>
           </p>
         </Panel>
       )}
