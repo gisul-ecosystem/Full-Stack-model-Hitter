@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { reevaluateSubmission } from "@/lib/submission-queue";
 
 export const runtime = "nodejs";
-export const maxDuration = 600;
+export const maxDuration = 86400;
 
 export async function POST(request: NextRequest) {
   try {

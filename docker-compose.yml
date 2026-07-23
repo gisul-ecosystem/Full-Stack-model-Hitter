@@ -44,7 +44,6 @@ services:
       # Model scoring — async project eval (no API key / org headers)
       MODEL_API_URL: https://model.aaptor.com
       MODEL_POLL_INTERVAL_MS: "2500"
-      MODEL_POLL_TIMEOUT_MS: "600000"
       MAX_ZIP_BYTES: "26214400"
     volumes:
       - uploads_data:/app/uploads

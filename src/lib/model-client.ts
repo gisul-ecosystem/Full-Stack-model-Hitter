@@ -360,10 +360,9 @@ export async function scoreSubmissionWithModel(
   }
 
   const pollIntervalMs = Number(process.env.MODEL_POLL_INTERVAL_MS || 2500);
-  const pollTimeoutMs = Number(process.env.MODEL_POLL_TIMEOUT_MS || 10 * 60 * 1000);
-  const started = Date.now();
 
-  while (Date.now() - started < pollTimeoutMs) {
+  // Poll until the model job completes or fails — no wall-clock timeout.
+  for (;;) {
     await sleep(pollIntervalMs);
 
     const pollRes = await fetch(`${baseUrl}/api/v1/job/${encodeURIComponent(jobId)}`, {
@@ -404,6 +403,4 @@ export async function scoreSubmissionWithModel(
 
     // pending | processing | queued → keep polling
   }
-
-  throw new Error(`Model job timed out after ${pollTimeoutMs}ms (job_id=${jobId})`);
 }
