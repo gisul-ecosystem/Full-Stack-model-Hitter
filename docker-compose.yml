@@ -29,6 +29,7 @@ services:
       # App uses compose Mongo (same DB as host via localhost:27017)
       MONGODB_URI: mongodb://mongo:27017/vm-to-model
       APP_BASE_URL: ${APP_BASE_URL:-https://submit.aaptor.com}
+      APP_TIMEZONE: Asia/Kolkata
 
       # ZeptoMail (Zoho) — Send Mail API
       ZEPTOMAIL_API_KEY: "PHtE6r0OSuno3jEr+xIB5fS5R5LwMt4mr7w1LAJGuYgRCaMAS00A/dF+mj7mqE8rVPkRRvabz49rsumetbmCJWnrNG8fDWqyqK3sx/VYSPOZsbq6x00Zs1kfdEbYUI7sdt5p0CDSuN/eNA=="

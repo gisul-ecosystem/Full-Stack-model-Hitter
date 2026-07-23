@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useEmailTemplateModal } from "@/components/EmailTemplateModal";
 import { AlertBanner } from "@/components/ui";
+import { formatIstLabel, istDatetimeLocalToIso, toIstDatetimeLocalValue } from "@/lib/ist";
 
 type TestDto = {
   _id: string;
@@ -155,14 +156,6 @@ function statusTone(label: string) {
   return "bg-stone-100 text-stone-600 ring-1 ring-stone-200";
 }
 
-function toDatetimeLocalValue(iso?: string | null) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 export default function TestDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -205,8 +198,8 @@ export default function TestDetailPage() {
       setGradeCriteria((testData.test?.acceptanceCriteria || []).join("\n"));
       setGradeLanguage(testData.test?.languageHint || "");
       setGradeFramework(testData.test?.frameworkHint || "");
-      setStartsAtLocal(toDatetimeLocalValue(testData.test?.startsAt));
-      setEndsAtLocal(toDatetimeLocalValue(testData.test?.endsAt));
+      setStartsAtLocal(toIstDatetimeLocalValue(testData.test?.startsAt));
+      setEndsAtLocal(toIstDatetimeLocalValue(testData.test?.endsAt));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
@@ -359,16 +352,22 @@ export default function TestDetailPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          startsAt: startsAtLocal || null,
-          endsAt: endsAtLocal || null,
+          startsAt: startsAtLocal ? istDatetimeLocalToIso(startsAtLocal) : null,
+          endsAt: endsAtLocal ? istDatetimeLocalToIso(endsAtLocal) : null,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save submit window");
       setTest(data.test);
-      setStartsAtLocal(toDatetimeLocalValue(data.test?.startsAt));
-      setEndsAtLocal(toDatetimeLocalValue(data.test?.endsAt));
-      setMessage("Submit window saved. The link only works between start and end.");
+      setStartsAtLocal(toIstDatetimeLocalValue(data.test?.startsAt));
+      setEndsAtLocal(toIstDatetimeLocalValue(data.test?.endsAt));
+      setMessage(
+        `Submit window saved (IST). ${
+          data.test?.startsAt ? `Opens ${formatIstLabel(data.test.startsAt)}` : "No start"
+        } · ${
+          data.test?.endsAt ? `Closes ${formatIstLabel(data.test.endsAt)}` : "No end"
+        }.`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save submit window");
     } finally {
@@ -564,14 +563,14 @@ export default function TestDetailPage() {
       {/* Submit window */}
       <section className="mb-5 rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
         <div className="mb-4">
-          <h2 className="m-0 text-[1.1rem] font-bold text-slate-900">Submit window</h2>
+          <h2 className="m-0 text-[1.1rem] font-bold text-slate-900">Submit window (IST)</h2>
           <p className="mt-1 mb-0 text-sm text-slate-500">
-            The public submit URL works only between start and end. Before start or after end, uploads are blocked.
+            Times are Indian Standard Time only. The submit URL works only between start and end.
           </p>
         </div>
         <div className="grid max-w-3xl gap-3 sm:grid-cols-2">
           <label className="block text-sm font-medium text-slate-700">
-            Start time
+            Start time (IST)
             <input
               type="datetime-local"
               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-normal"
@@ -580,7 +579,7 @@ export default function TestDetailPage() {
             />
           </label>
           <label className="block text-sm font-medium text-slate-700">
-            End time
+            End time (IST)
             <input
               type="datetime-local"
               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-normal"
@@ -589,6 +588,13 @@ export default function TestDetailPage() {
             />
           </label>
         </div>
+        {(test.startsAt || test.endsAt) && (
+          <p className="mt-3 mb-0 text-sm text-slate-600">
+            {test.startsAt ? `Opens ${formatIstLabel(test.startsAt)}` : "No start"}
+            {" · "}
+            {test.endsAt ? `Closes ${formatIstLabel(test.endsAt)}` : "No end"}
+          </p>
+        )}
         <button
           type="button"
           disabled={busy}

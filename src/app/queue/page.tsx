@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, Fragment } from "react";
 import Link from "next/link";
 import { AlertBanner, PageHeader, Panel, StatCard, StatusPill } from "@/components/ui";
+import { formatIst } from "@/lib/ist";
 
 type CriterionResult = {
   criterion?: string;
@@ -197,7 +198,7 @@ export default function QueuePage() {
           }
           hint={
             data?.polledAt
-              ? `Updated ${new Date(data.polledAt).toLocaleTimeString()}`
+              ? `Updated ${formatIst(data.polledAt, "time")} IST`
               : undefined
           }
         />

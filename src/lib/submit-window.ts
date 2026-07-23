@@ -1,4 +1,14 @@
 import type { ITest } from "@/lib/models/Test";
+import {
+  IST_TIMEZONE,
+  formatIstLabel,
+  parseIstAwareDate,
+  toIstDatetimeLocalValue,
+  istDatetimeLocalToIso,
+} from "@/lib/ist";
+
+export { IST_TIMEZONE, formatIstLabel, toIstDatetimeLocalValue, istDatetimeLocalToIso };
+export const APP_TIMEZONE = IST_TIMEZONE;
 
 export type SubmitWindowState =
   | { open: true; reason?: undefined; startsAt?: Date; endsAt?: Date }
@@ -38,7 +48,7 @@ export function getSubmitWindowState(
     return {
       open: false,
       reason: "not_started",
-      message: `Submissions open at ${startsAt.toLocaleString()}.`,
+      message: `Submissions open at ${formatIstLabel(startsAt)}.`,
       startsAt,
       endsAt,
     };
@@ -48,7 +58,7 @@ export function getSubmitWindowState(
     return {
       open: false,
       reason: "ended",
-      message: `Submissions closed at ${endsAt.toLocaleString()}.`,
+      message: `Submissions closed at ${formatIstLabel(endsAt)}.`,
       startsAt,
       endsAt,
     };
@@ -57,24 +67,17 @@ export function getSubmitWindowState(
   return { open: true, startsAt, endsAt };
 }
 
+/** @deprecated use parseIstAwareDate — kept for API imports */
 export function parseOptionalDate(raw: unknown): Date | null | undefined {
-  if (raw === null) return null;
-  if (raw === undefined) return undefined;
-  if (typeof raw !== "string") return undefined;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const d = new Date(trimmed);
-  if (Number.isNaN(d.getTime())) {
-    throw new Error("Invalid date/time");
-  }
-  return d;
+  return parseIstAwareDate(raw);
 }
 
-/** Value for `<input type="datetime-local" />` in local timezone. */
+/** @deprecated use toIstDatetimeLocalValue */
 export function toDatetimeLocalValue(isoOrDate?: string | Date | null): string {
-  if (!isoOrDate) return "";
-  const d = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return toIstDatetimeLocalValue(isoOrDate);
+}
+
+/** @deprecated use istDatetimeLocalToIso */
+export function datetimeLocalToIso(local: string): string | null {
+  return istDatetimeLocalToIso(local);
 }

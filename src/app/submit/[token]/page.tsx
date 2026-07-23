@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { AlertBanner, PageHeader, Panel } from "@/components/ui";
+import { formatIstLabel } from "@/lib/ist";
 
 export default function IsolatedSubmitPage() {
   const params = useParams();
@@ -90,8 +91,8 @@ export default function IsolatedSubmitPage() {
   }
 
   const windowHint = [
-    startsAt ? `Opens ${new Date(startsAt).toLocaleString()}` : null,
-    endsAt ? `Closes ${new Date(endsAt).toLocaleString()}` : null,
+    startsAt ? `Opens ${formatIstLabel(startsAt)}` : null,
+    endsAt ? `Closes ${formatIstLabel(endsAt)}` : null,
   ]
     .filter(Boolean)
     .join(" · ");

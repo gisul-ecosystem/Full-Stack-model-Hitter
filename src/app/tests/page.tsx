@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AlertBanner, PageHeader, Panel, StatusPill } from "@/components/ui";
+import { istDatetimeLocalToIso } from "@/lib/ist";
 
 type TestRow = {
   _id: string;
@@ -68,8 +69,8 @@ export default function TestsPage() {
           acceptanceCriteria,
           languageHint,
           frameworkHint,
-          startsAt: startsAt || null,
-          endsAt: endsAt || null,
+          startsAt: startsAt ? istDatetimeLocalToIso(startsAt) : null,
+          endsAt: endsAt ? istDatetimeLocalToIso(endsAt) : null,
         }),
       });
       const data = await res.json();
@@ -157,7 +158,7 @@ export default function TestsPage() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
-              Start time
+              Start time (IST)
               <input
                 type="datetime-local"
                 className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2"
@@ -166,7 +167,7 @@ export default function TestsPage() {
               />
             </label>
             <label className="block text-sm">
-              End time
+              End time (IST)
               <input
                 type="datetime-local"
                 className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2"
@@ -176,7 +177,7 @@ export default function TestsPage() {
             </label>
           </div>
           <p className="m-0 text-xs text-[var(--muted)]">
-            Submit link works only between start and end. Leave empty for no time limit.
+            All times are Indian Standard Time (IST), 12-hour display elsewhere. Leave empty for no time limit.
           </p>
           <button
             type="submit"

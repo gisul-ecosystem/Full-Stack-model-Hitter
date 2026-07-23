@@ -3,7 +3,7 @@ import { connectMongo } from "@/lib/mongodb";
 import { DEFAULT_PROJECT_RUBRIC, Test } from "@/lib/models/Test";
 import { DEFAULT_BODY, DEFAULT_SUBJECT } from "@/lib/email-template";
 import { createSubmitToken } from "@/lib/tokens";
-import { parseOptionalDate } from "@/lib/submit-window";
+import { parseIstAwareDate } from "@/lib/ist";
 
 export const runtime = "nodejs";
 
@@ -44,8 +44,8 @@ export async function POST(request: NextRequest) {
     let startsAt: Date | null | undefined;
     let endsAt: Date | null | undefined;
     try {
-      startsAt = parseOptionalDate(body.startsAt);
-      endsAt = parseOptionalDate(body.endsAt);
+      startsAt = parseIstAwareDate(body.startsAt);
+      endsAt = parseIstAwareDate(body.endsAt);
     } catch {
       return NextResponse.json({ error: "Invalid start or end time" }, { status: 400 });
     }

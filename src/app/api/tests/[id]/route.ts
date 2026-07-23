@@ -3,7 +3,7 @@ import { connectMongo } from "@/lib/mongodb";
 import { Test, type ITest } from "@/lib/models/Test";
 import { TestCandidate } from "@/lib/models/TestCandidate";
 import { submissionUrlForToken } from "@/lib/email-template";
-import { parseOptionalDate } from "@/lib/submit-window";
+import { parseIstAwareDate } from "@/lib/ist";
 
 export const runtime = "nodejs";
 
@@ -91,7 +91,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     if (body.startsAt !== undefined) {
       try {
-        const startsAt = parseOptionalDate(body.startsAt);
+        const startsAt = parseIstAwareDate(body.startsAt);
         test.startsAt = startsAt || undefined;
       } catch {
         return NextResponse.json({ error: "Invalid start time" }, { status: 400 });
@@ -99,7 +99,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
     if (body.endsAt !== undefined) {
       try {
-        const endsAt = parseOptionalDate(body.endsAt);
+        const endsAt = parseIstAwareDate(body.endsAt);
         test.endsAt = endsAt || undefined;
       } catch {
         return NextResponse.json({ error: "Invalid end time" }, { status: 400 });
