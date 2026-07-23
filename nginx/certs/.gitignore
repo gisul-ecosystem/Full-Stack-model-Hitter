@@ -1,0 +1,5 @@
+# Place Cloudflare Origin Certificate files here (not committed):
+#   origin.pem  - certificate (PEM)
+#   origin.key  - private key (PEM)
+*
+!.gitignore
