@@ -6,6 +6,8 @@ const emailSchema = z.string().email();
 export type ParsedStudentRow = {
   name: string;
   email: string;
+  labsEmail?: string;
+  labsPassword?: string;
 };
 
 export type ParseStudentsResult = {
@@ -25,6 +27,32 @@ function detectKind(filename: string): "excel" | "csv" | null {
   if (lower.endsWith(".csv")) return "csv";
   if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) return "excel";
   return null;
+}
+
+function pickLabEmail(normalized: Record<string, unknown>) {
+  return String(
+    normalized.labsemail ||
+      normalized.labs_email ||
+      normalized.lab_email ||
+      normalized.labemail ||
+      normalized.vm_email ||
+      normalized.vm_labs_email ||
+      ""
+  )
+    .trim()
+    .toLowerCase();
+}
+
+function pickLabPassword(normalized: Record<string, unknown>) {
+  return String(
+    normalized.labspassword ||
+      normalized.labs_password ||
+      normalized.lab_password ||
+      normalized.labpassword ||
+      normalized.vm_password ||
+      normalized.vm_labs_password ||
+      ""
+  ).trim();
 }
 
 export function parseStudentsFile(buffer: Buffer, filename: string): ParseStudentsResult {
@@ -69,6 +97,8 @@ export function parseStudentsFile(buffer: Buffer, filename: string): ParseStuden
     const email = String(normalized.email || normalized.email_id || "")
       .trim()
       .toLowerCase();
+    const labsEmail = pickLabEmail(normalized);
+    const labsPassword = pickLabPassword(normalized);
     const excelRow = index + 2;
 
     if (!name || !email) {
@@ -79,12 +109,21 @@ export function parseStudentsFile(buffer: Buffer, filename: string): ParseStuden
       errors.push(`Row ${excelRow}: invalid email "${email}"`);
       return;
     }
+    if (labsEmail && !emailSchema.safeParse(labsEmail).success) {
+      errors.push(`Row ${excelRow}: invalid labsemail "${labsEmail}"`);
+      return;
+    }
     if (seen.has(email)) {
       errors.push(`Row ${excelRow}: duplicate email "${email}"`);
       return;
     }
     seen.add(email);
-    students.push({ name, email });
+    students.push({
+      name,
+      email,
+      labsEmail: labsEmail || undefined,
+      labsPassword: labsPassword || undefined,
+    });
   });
 
   return { students, errors };

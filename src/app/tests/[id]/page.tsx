@@ -162,6 +162,8 @@ export default function TestDetailPage() {
   const [addTab, setAddTab] = useState<"manual" | "csv">("manual");
   const [manualName, setManualName] = useState("");
   const [manualEmail, setManualEmail] = useState("");
+  const [manualLabsEmail, setManualLabsEmail] = useState("");
+  const [manualLabsPassword, setManualLabsPassword] = useState("");
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -195,18 +197,26 @@ export default function TestDetailPage() {
     setCsvFile(null);
     setManualName("");
     setManualEmail("");
+    setManualLabsEmail("");
+    setManualLabsPassword("");
     setAddTab("manual");
   }
 
   async function addCandidateManual() {
     const name = manualName.trim();
     const email = manualEmail.trim().toLowerCase();
+    const labsEmail = manualLabsEmail.trim().toLowerCase();
+    const labsPassword = manualLabsPassword.trim();
     if (!name || !email) {
       setError("Name and email are required");
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setError("Enter a valid email address");
+      return;
+    }
+    if (labsEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(labsEmail)) {
+      setError("Enter a valid labs email");
       return;
     }
     setBusy(true);
@@ -216,7 +226,16 @@ export default function TestDetailPage() {
       const res = await fetch(`/api/tests/${id}/candidates`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ people: [{ name, email }] }),
+        body: JSON.stringify({
+          people: [
+            {
+              name,
+              email,
+              labsEmail: labsEmail || undefined,
+              labsPassword: labsPassword || undefined,
+            },
+          ],
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to add candidate");
@@ -693,6 +712,26 @@ export default function TestDetailPage() {
                     className="mt-1.5 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
                   />
                 </label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Labs email
+                  <input
+                    type="email"
+                    value={manualLabsEmail}
+                    onChange={(e) => setManualLabsEmail(e.target.value)}
+                    placeholder="vm lab login email"
+                    className="mt-1.5 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
+                  />
+                </label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Labs password
+                  <input
+                    type="text"
+                    value={manualLabsPassword}
+                    onChange={(e) => setManualLabsPassword(e.target.value)}
+                    placeholder="vm lab password"
+                    className="mt-1.5 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
+                  />
+                </label>
                 <button
                   type="submit"
                   disabled={busy || !manualName.trim() || !manualEmail.trim()}
@@ -704,9 +743,11 @@ export default function TestDetailPage() {
             ) : (
               <div>
                 <p className="m-0 mb-3 text-sm text-slate-500">
-                  Upload a CSV with columns{" "}
-                  <code className="rounded bg-slate-100 px-1">name</code> and{" "}
-                  <code className="rounded bg-slate-100 px-1">email</code>.
+                  CSV columns:{" "}
+                  <code className="rounded bg-slate-100 px-1">name</code>,{" "}
+                  <code className="rounded bg-slate-100 px-1">email</code>,{" "}
+                  <code className="rounded bg-slate-100 px-1">labsemail</code>,{" "}
+                  <code className="rounded bg-slate-100 px-1">labspassword</code>
                 </p>
                 <label className="mb-4 block text-sm font-medium text-slate-700">
                   CSV or Excel file

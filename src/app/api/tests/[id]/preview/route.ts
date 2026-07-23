@@ -39,6 +39,8 @@ export async function GET(request: NextRequest, { params }: Params) {
       email: candidate.email,
       submissionUrl,
       testTitle: test.title,
+      labsEmail: candidate.labsEmail,
+      labsPassword: candidate.labsPassword,
     });
 
     return NextResponse.json({

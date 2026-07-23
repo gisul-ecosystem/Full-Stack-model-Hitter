@@ -15,6 +15,8 @@ export interface ITestCandidate {
   studentId?: mongoose.Types.ObjectId;
   name: string;
   email: string;
+  labsEmail?: string;
+  labsPassword?: string;
   emailStatus: EmailStatus;
   emailError?: string;
   sentAt?: Date;
@@ -34,6 +36,8 @@ const TestCandidateSchema = new Schema<ITestCandidate>(
     studentId: { type: Schema.Types.ObjectId, ref: "Student", index: true },
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, trim: true, lowercase: true },
+    labsEmail: { type: String, trim: true, lowercase: true },
+    labsPassword: { type: String, trim: true },
     emailStatus: {
       type: String,
       enum: ["pending", "sent", "failed", "skipped"],

@@ -65,6 +65,8 @@ export async function POST(request: NextRequest, { params }: Params) {
           email: candidate.email,
           submissionUrl,
           testTitle: test.title,
+          labsEmail: candidate.labsEmail,
+          labsPassword: candidate.labsPassword,
         });
         await sendCandidateEmail({
           to: candidate.email,

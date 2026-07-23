@@ -16,7 +16,14 @@ import {
 } from "@/lib/email-template";
 import { StatusPill } from "@/components/ui";
 
-const PLACEHOLDERS = ["{{name}}", "{{email}}", "{{submission_url}}", "{{test_title}}"];
+const PLACEHOLDERS = [
+  "{{name}}",
+  "{{email}}",
+  "{{submission_url}}",
+  "{{test_title}}",
+  "{{labsemail}}",
+  "{{labspassword}}",
+];
 
 type EmailModalContextValue = {
   openEmailTemplate: (testId?: string | null) => void;
@@ -69,6 +76,8 @@ type CandidateDto = {
   name: string;
   email: string;
   emailStatus: string;
+  labsEmail?: string;
+  labsPassword?: string;
 };
 
 function EmailTemplateModal({
@@ -148,6 +157,8 @@ function EmailTemplateModal({
         email: previewCandidate.email,
         submissionUrl,
         testTitle: test?.title || "",
+        labsEmail: previewCandidate.labsEmail,
+        labsPassword: previewCandidate.labsPassword,
       })
     : null;
 

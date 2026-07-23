@@ -29,7 +29,7 @@ async function addRowsToTest(testId: string, rows: ParsedStudentRow[]) {
         studentsUpdated += 1;
       }
     } else {
-      student = await Student.create(row);
+      student = await Student.create({ name: row.name, email: row.email });
       studentsCreated += 1;
     }
 
@@ -39,6 +39,8 @@ async function addRowsToTest(testId: string, rows: ParsedStudentRow[]) {
         studentId: student._id,
         name: row.name,
         email: row.email,
+        labsEmail: row.labsEmail,
+        labsPassword: row.labsPassword,
         emailStatus: "pending",
         scoreStatus: "none",
         filesExtracted: 0,
@@ -46,6 +48,23 @@ async function addRowsToTest(testId: string, rows: ParsedStudentRow[]) {
       });
       added += 1;
     } catch {
+      const existing = await TestCandidate.findOne({ testId: test._id, email: row.email });
+      if (existing) {
+        let changed = false;
+        if (row.labsEmail && existing.labsEmail !== row.labsEmail) {
+          existing.labsEmail = row.labsEmail;
+          changed = true;
+        }
+        if (row.labsPassword && existing.labsPassword !== row.labsPassword) {
+          existing.labsPassword = row.labsPassword;
+          changed = true;
+        }
+        if (row.name && existing.name !== row.name) {
+          existing.name = row.name;
+          changed = true;
+        }
+        if (changed) await existing.save();
+      }
       skipped += 1;
     }
   }
@@ -96,7 +115,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       parseErrors = parsed.errors;
       if (!rows.length) {
         return NextResponse.json(
-          { error: "No valid rows found. Need columns: name, email.", errors: parseErrors },
+          { error: "No valid rows found. Need columns: name, email (labsemail, labspassword optional).", errors: parseErrors },
           { status: 400 }
         );
       }
@@ -108,11 +127,30 @@ export async function POST(request: NextRequest, { params }: Params) {
       if (people.length) {
         for (const person of people) {
           if (!person || typeof person !== "object") continue;
-          const name = String((person as { name?: unknown }).name || "").trim();
-          const email = String((person as { email?: unknown }).email || "")
+          const p = person as {
+            name?: unknown;
+            email?: unknown;
+            labsEmail?: unknown;
+            labsPassword?: unknown;
+            labsemail?: unknown;
+            labspassword?: unknown;
+          };
+          const name = String(p.name || "").trim();
+          const email = String(p.email || "")
             .trim()
             .toLowerCase();
-          if (name && email) rows.push({ name, email });
+          const labsEmail = String(p.labsEmail || p.labsemail || "")
+            .trim()
+            .toLowerCase();
+          const labsPassword = String(p.labsPassword || p.labspassword || "").trim();
+          if (name && email) {
+            rows.push({
+              name,
+              email,
+              labsEmail: labsEmail || undefined,
+              labsPassword: labsPassword || undefined,
+            });
+          }
         }
       } else if (studentIds.length) {
         const students = await Student.find({ _id: { $in: studentIds } });
